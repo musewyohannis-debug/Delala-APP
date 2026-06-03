@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Radiant gold seal/circle surrounding the core emblem -->
+    <path
+        android:strokeColor="#FCB813"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M 54,18 A 36,36 0 1,1 53.99,18 Z" />
+
+    <!-- Pure white abstract letter "D" for Delala inside the circle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 42,34 L 56,34 C 65,34 70,39 70,54 C 70,69 65,74 56,74 L 42,74 Z M 48,40 L 48,68 L 56,68 C 61,68 64,65 64,54 C 64,43 61,40 56,40 Z" />
+</vector>

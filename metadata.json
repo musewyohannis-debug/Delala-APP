@@ -1,0 +1,6 @@
+{
+  "name": "Delala",
+  "description": "DELALA – Full-Stack Marketplace App for Ethiopia connecting buyers and sellers directly with adaptive trust tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
