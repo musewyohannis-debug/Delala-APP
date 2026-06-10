@@ -35,10 +35,10 @@ class DelalaRepository(
                 }
                 
                 // Add Admin account if not exists
-                val adminUser = userDao.getUserByPhone("0912345678")
+                val adminUser = userDao.getUserByPhone("0905359955")
                 if (adminUser == null) {
                     val defaultAdmin = UserEntity(
-                        phone = "0912345678",
+                        phone = "0905359955",
                         name = "Ephraim (Delala Admin)",
                         email = "ephraim@delala.app",
                         location = "Dire Dawa",

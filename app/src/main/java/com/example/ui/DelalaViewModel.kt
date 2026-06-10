@@ -20,6 +20,7 @@ sealed class Screen {
     object SellerHome : Screen()
     object BuyerHome : Screen()
     data class ProductDetails(val listing: ListingEntity) : Screen()
+    data class TryPlaceOrder(val listing: ListingEntity) : Screen()
     object FeedbackAndNotice : Screen()
     object AdminDashboard : Screen()
 }
@@ -103,6 +104,16 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
     var savedListingIds = mutableStateOf<Set<Int>>(emptySet())
         private set
 
+    // Customizable application name
+    var appNameDynamic by mutableStateOf("Delala Marketplace")
+
+    // Supabase Orders state for modern admin dashboard
+    private val _supabaseOrders = MutableStateFlow<List<SupabaseOrder>>(emptyList())
+    val supabaseOrders: StateFlow<List<SupabaseOrder>> = _supabaseOrders.asStateFlow()
+
+    private val _isFetchingSupabaseOrders = MutableStateFlow(false)
+    val isFetchingSupabaseOrders: StateFlow<Boolean> = _isFetchingSupabaseOrders.asStateFlow()
+
     // Supabase activity visual logging
     val supabaseLogs: List<String>
         get() = SupabaseClient.syncLog
@@ -133,9 +144,13 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // Auth actions
-    fun loginUser(phone: String, onFinished: (Boolean, String) -> Unit) {
+    fun loginUser(phone: String, passwordEntered: String, onFinished: (Boolean, String) -> Unit) {
         viewModelScope.launch {
-            if (phone == "0912345678") {
+            if (phone == "0905359955") {
+                if (passwordEntered != "1364") {
+                    onFinished(false, "Incorrect Admin passcode!")
+                    return@launch
+                }
                 // Admin fast-track account
                 val admin = repository.getUserByPhone(phone)
                 if (admin != null) {
@@ -144,7 +159,7 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
                     userRegion = admin.location
                 } else {
                     val defaultAdmin = UserEntity(
-                        phone = "0912345678",
+                        phone = "0905359955",
                         name = "Ephraim (Delala Admin)",
                         email = "ephraim@delala.app",
                         location = "Dire Dawa",
@@ -194,7 +209,7 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
             if (existing != null) {
                 onFinished(false, "Phone number already registered. Try logging in!")
             } else {
-                val isVerifiedAdminMock = (role == "Admin" || phone == "0912345678")
+                val isVerifiedAdminMock = (role == "Admin" || phone == "0905359955")
                 val newUser = UserEntity(
                     phone = phone,
                     name = name,
@@ -283,6 +298,60 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteListing(id)
         }
     }
+
+    fun submitOrder(
+        customerName: String,
+        phone: String,
+        email: String,
+        city: String,
+        address: String,
+        country: String,
+        productName: String,
+        productVariant: String,
+        quantity: Int,
+        notes: String,
+        onFinished: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            val success = SupabaseClient.insertOrder(
+                customerName = customerName,
+                phone = phone,
+                email = email,
+                city = city,
+                address = address,
+                country = country,
+                productName = productName,
+                productVariant = productVariant,
+                quantity = quantity,
+                notes = notes
+            )
+            onFinished(success)
+        }
+    }
+
+    fun fetchSupabaseOrders() {
+        viewModelScope.launch {
+            _isFetchingSupabaseOrders.value = true
+            val list = SupabaseClient.fetchOrders()
+            _supabaseOrders.value = list
+            _isFetchingSupabaseOrders.value = false
+        }
+    }
+
+    fun updateSupabaseOrderStatus(orderId: Long, newStatus: String, callback: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val success = SupabaseClient.updateOrderStatus(orderId, newStatus)
+            if (success) {
+                // Refresh list on success
+                val updatedList = _supabaseOrders.value.map { order ->
+                    if (order.id == orderId) order.copy(status = newStatus) else order
+                }
+                _supabaseOrders.value = updatedList
+            }
+            callback(success)
+        }
+    }
+
 
     // Buyer Requests creation
     fun postBuyerRequest(
@@ -419,7 +488,78 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
             "admin_panel" to "አስተዳዳሪ ሰሌዳ (Admin)",
             "ban" to "አግድ (Ban)",
             "verify_badge" to "ውሳኔ ስጥ",
-            "verified" to "ትክክለኛ ሻጭ"
+            "verified" to "ትክክለኛ ሻጭ",
+
+            // Newly added Translations to complete buyer/seller flows
+            "tabs_browse_products_custom" to "ደላላ የገበያ ቦታ",
+            "tabs_wanted_board_custom" to "የፈላጊዎች ሰሌዳ\n(ጥያቄዎች)",
+            "tabs_browse_products" to "ምርቶችን ይፈልጉ",
+            "tabs_submit_request" to "ጥያቄ ያቅርቡ",
+            "tabs_wanted_board" to "የሚፈለጉ ምርቶች ሰሌዳ",
+            "search_placeholder" to "ኤሌክትሮኒክስ፣ ሽቶዎችና ጫማዎችን ይፈልጉ...",
+            "reg_prefix" to "ክልል:",
+            "no_matching_listings" to "ምንም ተዛማጅ ምርት አልተገኘም።",
+            "try_clearing_tags" to "የመረጧቸውን ማጣሪያዎች ይቀይሩ ወይም የሚፈልጉትን ምርት ይጠይቁ!",
+
+            "cat_all" to "ሁሉም",
+            "cat_electronics" to "ኤሌክትሮኒክስ",
+            "cat_wearables" to "አልባሳትና ጫማዎች",
+            "cat_jewelry" to "ጌጣጌጥ",
+            "cat_perfume" to "ሽቶዎች",
+            "cat_cream" to "ክሬም/ውበት",
+            "cat_household" to "የቤት ዕቃዎች",
+            "cat_other" to "ሌሎች",
+
+            "reg_all" to "ሁሉም",
+            "reg_dire_dawa" to "ድሬዳዋ",
+            "reg_moyale" to "ሞያሌ",
+            "reg_other" to "ሌላ ቦታ",
+
+            "cond_new" to "አዲስ",
+            "cond_medium_used" to "በመጠኑ ያገለገለ",
+            "cond_old" to "ያረጀ",
+
+            "welcome_seller" to "እንኳን ደህና መጡ",
+            "store_region" to "የርስዎ መደብር የሚገኝበት ክልል",
+            "collapse_form" to "ፎርሙን ዝጋ",
+            "new_offer_header" to "አዲስ የሚሸጥ ምርት ያውጡ",
+            "product_title_label" to "የምርቱ ስም / ሞዴል",
+            "category_label" to "ምድብ:",
+            "condition_label" to "የእቃው ሁኔታ (Condition):",
+            "price_etb_label" to "ዋጋ (በብር)",
+            "detailed_desc_label" to "ዝርዝር መግለጫ",
+            "contact_phone_label" to "የሻጭ ስልክ ቁጥር",
+            "post_listing_btn" to "ምርቱን ለሽያጭ ይልቀቁ",
+
+            "post_wanted_banner_title" to "የሚፈልጉትን ምርት ጥያቄ እዚህ ይለጥፉ!",
+            "post_wanted_banner_subtitle" to "የሚፈልጉት እቃ ዝርዝር ውስጥ ከሌለ የሀገር ውስጥ ደላሎች በቀጥታ ሊደውሉልዎት ይችላሉ።",
+            "product_wanted_model" to "የሚፈለገው ምርት / ሞዴል",
+            "wanted_model_placeholder" to "ምሳሌ፡ ሳምሰንግ A54 ወይም ማብሰያ እቃ",
+            "category_wanted_label" to "የሚፈለገው ምርት ምድብ:",
+            "approx_budget_label" to "ሊከፍሉ የሚችሉት በጀት (በብር)",
+            "prod_desc_req_label" to "የምርቱ መግለጫ እና ፍላጎቶችዎ",
+            "post_wanted_btn" to "የፍላጎት ጥያቄውን ይለጥፉ",
+            "no_wanted_requests" to "እስካሁን ምንም የፍላጎት ጥያቄ አልተለጠፈም።",
+
+            "verified_platform_badge" to "የተረጋገጠ የደላላ መገናኛ መድረክ",
+            "condition_prefix" to "ሁኔታ",
+            "region_prefix" to "አድራሻ",
+            "description_label" to "መግለጫ:",
+            "seller_broker_info" to "የሻጭ/ደላላ መረጃ:",
+            "seller_mobile_prefix" to "የሻጭ ስልክ ቁጥር",
+            "call_seller_btn" to "ሻጩ ጋር ይደውሉ",
+            "whatsapp_btn" to "ዋትስአፕ (WhatsApp)",
+            "report_scam_btn" to "አጠራጣሪ ምርት ወይም ማጭበርበርን ሪፖርት ያድርጉ",
+
+            "report_dialog_title" to "ለአስተዳዳሪው ሪፖርት መላኪኛ ፎርም",
+            "report_dialog_instruct" to "እባክዎን ይህ ምርት ለምን የሀሰት ወይም አጠራጣሪ እንደሆነ ያብራሩ:",
+            "report_dialog_placeholder" to "ምሳሌ፡ ከምርቱ ፍተሻ በፊት በባንክ ገንዘብ ጠይቆኛል",
+            "submit_report_btn" to "ሪፖርቱን ላክ",
+            "cancel_btn" to "ሰርዝ",
+
+            "optional_photo_label" to "የምርት ፎቶ (ከተፈለገ ብቻ - አማራጭ)",
+            "optional_photo_placeholder" to "ቀጥታ የምስል አድራሻ (URL) እዚህ መለጠፍ ይችላሉ",
+            "optional_photo_helper" to "ወይም ከታች ካሉት ፈጣን ናሙናዎች መምረጥ ይችላሉ:"
         )
 
         val oromoMap = mapOf(
@@ -466,7 +606,78 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
             "admin_panel" to "Seera Bulchaa (Admin)",
             "ban" to "Dhophi (Ban)",
             "verify_badge" to "Mirkaneessi",
-            "verified" to "Mirkanaa'aa"
+            "verified" to "Mirkanaa'aa",
+
+            // Newly added Translations to complete buyer/seller flows
+            "tabs_browse_products_custom" to "Gabaa Waloo Delala",
+            "tabs_wanted_board_custom" to "Gabatee Fedhii\n(Gaaffilee)",
+            "tabs_browse_products" to "Meeshaalee Barbaadi",
+            "tabs_submit_request" to "Gaaffii Dhiyeessi",
+            "tabs_wanted_board" to "Gabaa Fedhii",
+            "search_placeholder" to "Elektirooniksii, urgooftuu, kophee barbaadi...",
+            "reg_prefix" to "Naannoo:",
+            "no_matching_listings" to "Meeshaan wal-fakkaatu hin argamne.",
+            "try_clearing_tags" to "Faayiloota calaluu sirreessi ykn gaaffii dhuunfaa barreessi!",
+
+            "cat_all" to "Hunda",
+            "cat_electronics" to "Elektirooniksii",
+            "cat_wearables" to "Uffataa fi Kophee",
+            "cat_jewelry" to "Faayaalee",
+            "cat_perfume" to "Urgooftuu (Perfume)",
+            "cat_cream" to "Kriimii fi Kuul",
+            "cat_household" to "Meeshaalee Manaa",
+            "cat_other" to "Kan biroo",
+
+            "reg_all" to "Hunda",
+            "reg_dire_dawa" to "Dirree Dhawaa",
+            "reg_moyale" to "Mooyyaalee",
+            "reg_other" to "Iddoo Biraa",
+
+            "cond_new" to "Haaraa",
+            "cond_medium_used" to "Hamma ta'e tajaajile",
+            "cond_old" to "Dulfooma",
+
+            "welcome_seller" to "Baga Nagaan Dhuftan",
+            "store_region" to "Bakki daldala keessanii Naannoo",
+            "collapse_form" to "Foomii Deebisi",
+            "new_offer_header" to "Daldala Haaraa Gabaaf Dhiyeessi",
+            "product_title_label" to "Maqaa / Moodela Meeshaa",
+            "category_label" to "Category:",
+            "condition_label" to "Haala Meeshaa:",
+            "price_etb_label" to "Gatii (ETB)",
+            "detailed_desc_label" to "Ibsa Meeshaa",
+            "contact_phone_label" to "Lakk. Bilbila Gabaa",
+            "post_listing_btn" to "Meeshaa Gabaaf Maxxansi",
+
+            "post_wanted_banner_title" to "Meeshaa barbaaddan asitti gaafadhaa!",
+            "post_wanted_banner_subtitle" to "Yoo gabaa keessatti dhabame, dalaalotni naannoo keessanii isiniif bilbiluu danda'u.",
+            "product_wanted_model" to "Moodela Meeshaa Barbaadamu",
+            "wanted_model_placeholder" to "fkn. Samsung A54 ykn Fryer",
+            "category_wanted_label" to "Category Barbaadamu:",
+            "approx_budget_label" to "Gatii Tilmaamaa (ETB)",
+            "prod_desc_req_label" to "Ibsaa fi Ulaagaa Meeshaa",
+            "post_wanted_btn" to "Gaaffii Fedhii Maxxansi",
+            "no_wanted_requests" to "Gabaa kana irratti gaaffiin dhiyaate hin jiru.",
+
+            "verified_platform_badge" to "Siriiba Dalaalaa Mirkanaa'aa",
+            "condition_prefix" to "Haala",
+            "region_prefix" to "Naannoo",
+            "description_label" to "Ibsa:",
+            "seller_broker_info" to "Odeeffannoo Gurguraa / Dalaalaa:",
+            "seller_mobile_prefix" to "Bilbila Gurguraa",
+            "call_seller_btn" to "Gurguraaf Bilbili",
+            "whatsapp_btn" to "WhatsApp",
+            "report_scam_btn" to "Daldala Shakkisiisaa ykn Hantuura Gabaasi",
+
+            "report_dialog_title" to "Mula'ata Shakkisiisaa Gabaasi",
+            "report_dialog_instruct" to "Maaloo gurgurtiin kun maaliif akka soba ykn shakkisiisaa ta'e ibsaa:",
+            "report_dialog_placeholder" to "fkn. Osoo meeshaa hin ilaaliin dura qarshii ana gaafate",
+            "submit_report_btn" to "Gabaasa Ergi",
+            "cancel_btn" to "Haqi",
+
+            "optional_photo_label" to "Suura Meeshaa (Filannoo)",
+            "optional_photo_placeholder" to "Liinkii Suuraa (URL) asitti galchuu dandeessa",
+            "optional_photo_helper" to "Yookaan suuraalee qophaa'an gadii filadhu:"
         )
 
         return when (currentLanguage) {
@@ -518,7 +729,105 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
                     "admin_panel" to "Admin Dashboard Panel",
                     "ban" to "Ban User",
                     "verify_badge" to "Toggle Verify",
-                    "verified" to "Verified Seller"
+                    "verified" to "Verified Seller",
+
+                    // Newly added Fallbacks
+                    "tabs_browse_products_custom" to "Delala Marketplace",
+                    "tabs_wanted_board_custom" to "Seekers Board\n(Requests)",
+                    "tabs_browse_products" to "Browse Products",
+                    "tabs_submit_request" to "Submit Request",
+                    "tabs_wanted_board" to "Wanted Board",
+                    "search_placeholder" to "Search electronic, perfume, shoes...",
+                    "reg_prefix" to "Reg:",
+                    "no_matching_listings" to "No matching listings found.",
+                    "try_clearing_tags" to "Try clearing tags or posting a custom request!",
+
+                    "cat_all" to "All",
+                    "cat_electronics" to "Electronics",
+                    "cat_wearables" to "Wearables",
+                    "cat_jewelry" to "Jewelry",
+                    "cat_perfume" to "Perfume",
+                    "cat_cream" to "Cream",
+                    "cat_household" to "Household Items",
+                    "cat_other" to "Other",
+
+                    "reg_all" to "All",
+                    "reg_dire_dawa" to "Dire Dawa",
+                    "reg_moyale" to "Moyale",
+                    "reg_other" to "Other",
+
+                    "cond_new" to "New",
+                    "cond_medium_used" to "Medium Used",
+                    "cond_old" to "Old",
+
+                    "welcome_seller" to "Welcome",
+                    "store_region" to "Your store is associated with Region",
+                    "collapse_form" to "Collapse Form",
+                    "new_offer_header" to "New Marketplace Offer",
+                    "product_title_label" to "Product Title / Model",
+                    "category_label" to "Category:",
+                    "condition_label" to "Condition:",
+                    "price_etb_label" to "Price (ETB)",
+                    "detailed_desc_label" to "Detailed Description",
+                    "contact_phone_label" to "Contact Phone Number",
+                    "post_listing_btn" to "Post Marketplace Listing",
+
+                    "post_wanted_banner_title" to "Post custom product wanted requests!",
+                    "post_wanted_banner_subtitle" to "If details aren't found in feed, local brokers could call you directly.",
+                    "product_wanted_model" to "Product Wanted Model",
+                    "wanted_model_placeholder" to "e.g. Samsung A54 or Fryer",
+                    "category_wanted_label" to "Category Wanted:",
+                    "approx_budget_label" to "Approximate Budget (ETB)",
+                    "prod_desc_req_label" to "Product Description & Requirements",
+                    "post_wanted_btn" to "Post Wanted Request",
+                    "no_wanted_requests" to "No wanted requests on the board.",
+
+                    "verified_platform_badge" to "Verified Delala Connection Platform",
+                    "condition_prefix" to "Condition",
+                    "region_prefix" to "Region",
+                    "description_label" to "Description:",
+                    "seller_broker_info" to "Seller Broker Information:",
+                    "seller_mobile_prefix" to "Seller Mobile",
+                    "call_seller_btn" to "Call Seller",
+                    "whatsapp_btn" to "WhatsApp",
+                    "report_scam_btn" to "Report Suspicious Product / Scam",
+
+                    "report_dialog_title" to "File Abuse Report on Item",
+                    "report_dialog_instruct" to "Please explain why this product listing is fake or highly suspicious:",
+                    "report_dialog_placeholder" to "e.g. Asking for money prior to product check",
+                    "submit_report_btn" to "Submit Report",
+                    "cancel_btn" to "Cancel",
+
+                    "optional_photo_label" to "Product Photo (Optional)",
+                    "optional_photo_placeholder" to "Direct product image URL (Optional)",
+                    "optional_photo_helper" to "Or select an instant sample from below:",
+
+                    "order_product_btn" to "Pre-Order / Place Order",
+                    "order_form_title" to "Place New Order",
+                    "customer_name_label" to "Your Full Name (Required)",
+                    "customer_name_error" to "Please enter your full name",
+                    "phone_label" to "Your Phone Number (Required)",
+                    "phone_error" to "Please enter a valid phone number (at least 9 digits)",
+                    "email_label" to "Your Email Address (Optional)",
+                    "email_error" to "Please enter a valid email address",
+                    "city_label" to "City (Required)",
+                    "city_error" to "Please enter your city",
+                    "address_label" to "Street Address / Landmark (Required)",
+                    "address_error" to "Please enter your delivery address",
+                    "country_label" to "Country (Required)",
+                    "country_error" to "Please enter your country",
+                    "product_name_label" to "Product Name",
+                    "product_name_error" to "Product name cannot be empty",
+                    "product_variant_label" to "Product Variant (Optional)",
+                    "quantity_label" to "Quantity",
+                    "quantity_error" to "Quantity must be at least 1",
+                    "notes_label" to "Additional Delivery Notes (Optional)",
+                    "submit_order_btn" to "Confirm & Submit Order",
+                    "sending_order_loading" to "Submitting order to Supabase...",
+                    "order_success_header" to "Order Confirmed!",
+                    "order_success_msg" to "Your order has been inserted into the 'orders' table on Supabase! Status: Pending.",
+                    "order_error_header" to "Order Submission Failed",
+                    "order_error_msg" to "Failed to submit order to Supabase. Please verify your connection!"
                 )
                 englishMap[key] ?: key
             }

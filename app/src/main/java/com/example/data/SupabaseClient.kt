@@ -219,4 +219,164 @@ object SupabaseClient {
             false
         }
     }
+
+    suspend fun insertOrder(
+        customerName: String,
+        phone: String,
+        email: String,
+        city: String,
+        address: String,
+        country: String,
+        productName: String,
+        productVariant: String,
+        quantity: Int,
+        notes: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject().apply {
+                put("customer_name", customerName)
+                put("phone", phone)
+                put("email", if (email.isBlank()) JSONObject.NULL else email)
+                put("city", city)
+                put("address", address)
+                put("country", country)
+                put("product_name", productName)
+                put("product_variant", if (productVariant.isBlank()) JSONObject.NULL else productVariant)
+                put("quantity", quantity)
+                put("notes", if (notes.isBlank()) JSONObject.NULL else notes)
+                put("status", "pending")
+            }.toString()
+
+            val appointmentsUrl = "https://ycikjhfmwkzhtcstucyg.supabase.co/rest/v1/appointments"
+            val appointmentsKey = "sb_publishable_PyvV2NWIBoQEF3hZHErHtA_65N53ybM"
+
+            addLog("POST Appointment to Supabase: $productName for $customerName")
+            val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+            val body = json.toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url(appointmentsUrl)
+                .addHeader("apikey", appointmentsKey)
+                .addHeader("Authorization", "Bearer $appointmentsKey")
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Prefer", "return=minimal")
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    lastSyncStatus = "Appointment submitted to Supabase successfully"
+                    addLog("Supabase Appointment success: Code ${response.code}")
+                    true
+                } else {
+                    lastSyncStatus = "Supabase Appointment POST failed: Code ${response.code}"
+                    addLog("Supabase Appointment error: Code ${response.code}")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            lastSyncStatus = "Supabase Appointment connection failed: ${e.message}"
+            addLog("Supabase Appointment error during insert: ${e.message}")
+            false
+        }
+    }
+
+    private fun buildRequestForOrders(endpoint: String, method: String, jsonBody: String? = null): Request {
+        val url = "$SUPABASE_URL/$endpoint"
+        val builder = Request.Builder()
+            .url(url)
+            .addHeader("apikey", API_KEY)
+            .addHeader("Authorization", "Bearer $API_KEY")
+            .addHeader("Content-Type", "application/json")
+        
+        if (jsonBody != null) {
+            val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+            val body = jsonBody.toRequestBody(mediaType)
+            builder.method(method, body)
+        } else {
+            builder.method(method, null)
+        }
+        return builder.build()
+    }
+
+    suspend fun fetchOrders(): List<SupabaseOrder> = withContext(Dispatchers.IO) {
+        try {
+            val urlWithQuery = "orders?select=*&order=id.desc"
+            val request = buildRequestForOrders(urlWithQuery, "GET")
+            
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyStr = response.body?.string() ?: "[]"
+                    val jsonArray = JSONArray(bodyStr)
+                    val list = mutableListOf<SupabaseOrder>()
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        val id = obj.optLong("id", 0L)
+                        val customerName = obj.optString("customer_name", "")
+                        val email = obj.optString("email", "")
+                        val phone = obj.optString("phone", "")
+                        val city = obj.optString("city", "")
+                        val address = obj.optString("address", "")
+                        val productName = obj.optString("product_name", "")
+                        val productVariant = obj.optString("product_variant", "")
+                        val quantity = obj.optInt("quantity", 1)
+                        val status = obj.optString("status", "pending")
+                        val createdAt = obj.optString("created_at", "")
+                        val country = obj.optString("country", "Ethiopia")
+                        val notes = obj.optString("notes", "")
+
+                        list.add(
+                            SupabaseOrder(
+                                id = id,
+                                customerName = customerName,
+                                email = email,
+                                phone = phone,
+                                city = city,
+                                address = address,
+                                productName = productName,
+                                productVariant = productVariant,
+                                quantity = quantity,
+                                status = status,
+                                createdAt = createdAt,
+                                country = country,
+                                notes = notes
+                            )
+                        )
+                    }
+                    list
+                } else {
+                    addLog("Supabase GET Orders failed: Code ${response.code}")
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            addLog("Supabase GET Orders failed with error: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun updateOrderStatus(orderId: Long, newStatus: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject().apply {
+                put("status", newStatus)
+            }.toString()
+
+            val urlWithQuery = "orders?id=eq.$orderId"
+            addLog("PATCH Order $orderId to $newStatus")
+            
+            val request = buildRequestForOrders(urlWithQuery, "PATCH", json)
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    addLog("Supabase Order status update success: $orderId -> $newStatus")
+                    true
+                } else {
+                    addLog("Supabase Order PATCH failed: Code ${response.code}")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            addLog("Supabase Order PATCH error: ${e.message}")
+            false
+        }
+    }
 }
+

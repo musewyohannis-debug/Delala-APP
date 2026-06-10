@@ -63,3 +63,20 @@ data class ReportEntity(
     val reason: String,
     val createdAt: Long = System.currentTimeMillis()
 ) : Serializable
+
+data class SupabaseOrder(
+    val id: Long,
+    val customerName: String,
+    val email: String,
+    val phone: String,
+    val city: String,
+    val address: String,
+    val productName: String,
+    val productVariant: String,
+    val quantity: Int,
+    val status: String,
+    val createdAt: String,
+    val country: String = "Ethiopia",
+    val notes: String = ""
+) : Serializable
+

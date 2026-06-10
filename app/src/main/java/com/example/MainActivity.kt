@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
                                 is Screen.SellerHome -> SellerHome(viewModel = viewModel)
                                 is Screen.BuyerHome -> BuyerHome(viewModel = viewModel)
                                 is Screen.ProductDetails -> ProductDetailsScreen(viewModel = viewModel, screen = screen)
+                                is Screen.TryPlaceOrder -> PlaceOrderScreen(viewModel = viewModel, screen = screen)
                                 is Screen.FeedbackAndNotice -> FeedbackAndNoticeScreen(viewModel = viewModel)
                                 is Screen.AdminDashboard -> AdminDashboardScreen(viewModel = viewModel)
                             }
