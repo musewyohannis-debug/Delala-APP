@@ -29,6 +29,26 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
     private val database = AppDatabase.getDatabase(application)
     private val repository = DelalaRepository(database, viewModelScope)
 
+    // Customizable application name
+    var appNameDynamic by mutableStateOf("Delala Marketplace")
+
+    // Dark Theme preference state
+    var darkThemeEnabled by mutableStateOf(false)
+        private set
+
+    init {
+        SupabaseClient.init(application)
+        val prefs = application.getSharedPreferences("delala_prefs", android.content.Context.MODE_PRIVATE)
+        appNameDynamic = prefs.getString("custom_app_name", "Delala Marketplace") ?: "Delala Marketplace"
+        darkThemeEnabled = prefs.getBoolean("dark_theme", false)
+    }
+
+    fun toggleDarkTheme(enabled: Boolean) {
+        darkThemeEnabled = enabled
+        val prefs = getApplication<Application>().getSharedPreferences("delala_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("dark_theme", enabled).apply()
+    }
+
     // Flow resources for reactivity
     val listingsState: StateFlow<List<ListingEntity>> = repository.allListings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -104,8 +124,11 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
     var savedListingIds = mutableStateOf<Set<Int>>(emptySet())
         private set
 
-    // Customizable application name
-    var appNameDynamic by mutableStateOf("Delala Marketplace")
+    fun updateAppName(newAppName: String) {
+        appNameDynamic = newAppName
+        val prefs = getApplication<Application>().getSharedPreferences("delala_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("custom_app_name", newAppName).apply()
+    }
 
     // Supabase Orders state for modern admin dashboard
     private val _supabaseOrders = MutableStateFlow<List<SupabaseOrder>>(emptyList())
@@ -146,20 +169,21 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
     // Auth actions
     fun loginUser(phone: String, passwordEntered: String, onFinished: (Boolean, String) -> Unit) {
         viewModelScope.launch {
-            if (phone == "0905359955") {
-                if (passwordEntered != "1364") {
+            if (phone == "0953348822" || phone.lowercase() == "admin") {
+                if (passwordEntered != "1364" && passwordEntered.lowercase() != "admin") {
                     onFinished(false, "Incorrect Admin passcode!")
                     return@launch
                 }
+                val targetPhone = if (phone.lowercase() == "admin") "0953348822" else phone
                 // Admin fast-track account
-                val admin = repository.getUserByPhone(phone)
+                val admin = repository.getUserByPhone(targetPhone)
                 if (admin != null) {
                     currentUser = admin
                     userRole = admin.role
                     userRegion = admin.location
                 } else {
                     val defaultAdmin = UserEntity(
-                        phone = "0905359955",
+                        phone = targetPhone,
                         name = "Ephraim (Delala Admin)",
                         email = "ephraim@delala.app",
                         location = "Dire Dawa",
@@ -209,7 +233,7 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
             if (existing != null) {
                 onFinished(false, "Phone number already registered. Try logging in!")
             } else {
-                val isVerifiedAdminMock = (role == "Admin" || phone == "0905359955")
+                val isVerifiedAdminMock = (role == "Admin" || phone == "0953348822")
                 val newUser = UserEntity(
                     phone = phone,
                     name = name,
@@ -237,6 +261,13 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
         selectedCategoryFilter = "All"
         selectedRegionFilter = "All"
         resetNavigation()
+    }
+
+    fun logoutAdmin() {
+        currentUser = null
+        userRole = "Guest"
+        searchQuery = ""
+        currentScreen = Screen.AdminDashboard
     }
 
     // Role, Region configuration during onboarding flows
@@ -325,6 +356,9 @@ class DelalaViewModel(application: Application) : AndroidViewModel(application) 
                 quantity = quantity,
                 notes = notes
             )
+            if (success) {
+                fetchSupabaseOrders()
+            }
             onFinished(success)
         }
     }

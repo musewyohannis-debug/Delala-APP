@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import com.example.data.*
 import com.example.ui.theme.DelalaGold
 import com.example.ui.theme.DelalaGreen
@@ -131,6 +132,13 @@ fun DelalaMasterLayout(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleDarkTheme(!viewModel.darkThemeEnabled) }) {
+                        Icon(
+                            imageVector = if (viewModel.darkThemeEnabled) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                            contentDescription = "Toggle Dark Mode",
+                            tint = if (viewModel.darkThemeEnabled) DelalaGold else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     IconButton(onClick = { showSyncLogs = true }) {
                         Icon(
                             imageVector = Icons.Filled.CloudSync,
@@ -204,6 +212,10 @@ fun DelalaMasterLayout(
     )
 
     if (showSyncLogs) {
+        var showConfigForm by remember { mutableStateOf(false) }
+        var urlInput by remember { mutableStateOf(SupabaseClient.getUrl()) }
+        var keyInput by remember { mutableStateOf(SupabaseClient.getKey()) }
+
         AlertDialog(
             onDismissRequest = { showSyncLogs = false },
             title = {
@@ -226,7 +238,7 @@ fun DelalaMasterLayout(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp)
+                            .height(150.dp)
                             .background(Color.Black, RoundedCornerShape(8.dp))
                             .padding(8.dp)
                     ) {
@@ -238,6 +250,58 @@ fun DelalaMasterLayout(
                                     color = Color.Green,
                                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                 )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = { showConfigForm = !showConfigForm }) {
+                        Text(if (showConfigForm) "Hide Custom Database Settings" else "Configure Custom Supabase Database")
+                    }
+                    
+                    if (showConfigForm) {
+                        Column {
+                            OutlinedTextField(
+                                value = urlInput,
+                                onValueChange = { urlInput = it },
+                                label = { Text("Supabase URL") },
+                                placeholder = { Text("https://xxx.supabase.co/rest/v1") },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = keyInput,
+                                onValueChange = { keyInput = it },
+                                label = { Text("Anon API Key") },
+                                placeholder = { Text("your_anon_public_key") },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                singleLine = true
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        SupabaseClient.updateCredentials(context, urlInput, keyInput)
+                                        Toast.makeText(context, "Supabase credentials updated!", Toast.LENGTH_SHORT).show()
+                                        showConfigForm = false
+                                    }
+                                ) {
+                                    Text("Save Settings")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        urlInput = ""
+                                        keyInput = ""
+                                        SupabaseClient.updateCredentials(context, "", "")
+                                        Toast.makeText(context, "Reset to default sandbox database!", Toast.LENGTH_SHORT).show()
+                                        showConfigForm = false
+                                    }
+                                ) {
+                                    Text("Reset Default")
+                                }
                             }
                         }
                     }
@@ -540,7 +604,7 @@ fun AuthScreen(viewModel: DelalaViewModel) {
                 value = phone,
                 onValueChange = { phone = it },
                 label = { Text(viewModel.t("phone_num")) },
-                placeholder = { Text("e.g. 0905359955") },
+                placeholder = { Text("e.g. 0911223344") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 leadingIcon = { Icon(Icons.Filled.Phone, null) },
                 shape = RoundedCornerShape(12.dp),
@@ -2657,7 +2721,7 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
                         color = Color(0xFF1F2937)
                     )
                     Text(
-                        text = "Enter secure administrator credentials to access database logs",
+                        text = "Enter secure administrator credentials ('admin' and 'admin') or use fast-track bypass below",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF6B7280),
                         textAlign = TextAlign.Center,
@@ -2686,11 +2750,11 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
                             phoneVal = it
                             errorMessage = null
                         },
-                        label = { Text("Phone Number") },
-                        placeholder = { Text("e.g. 0905359955") },
+                        label = { Text("Phone Number / Username") },
+                        placeholder = { Text("e.g. admin or 0953348822") },
                         leadingIcon = { Icon(Icons.Filled.Person, null, tint = Color(0xFF9CA3AF)) },
                         modifier = Modifier.fillMaxWidth().testTag("admin_login_phone_field"),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -2704,10 +2768,10 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
                             errorMessage = null
                         },
                         label = { Text("Passcode PIN") },
-                        placeholder = { Text("e.g. 1364") },
+                        placeholder = { Text("e.g. admin or 1364") },
                         leadingIcon = { Icon(Icons.Filled.Style, null, tint = Color(0xFF9CA3AF)) },
                         modifier = Modifier.fillMaxWidth().testTag("admin_login_pin_field"),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
@@ -2754,7 +2818,7 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
                     Button(
                         onClick = {
                             isLoggingIn = true
-                            viewModel.loginUser("0905359955", "1364") { success, msg ->
+                            viewModel.loginUser("0953348822", "1364") { success, msg ->
                                 isLoggingIn = false
                                 if (success) {
                                     Toast.makeText(context, "Welcome Developer! Bypass login successful.", Toast.LENGTH_SHORT).show()
@@ -2833,7 +2897,7 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
                         // Logout button
                         IconButton(
                             onClick = {
-                                viewModel.resetNavigation()
+                                viewModel.logoutAdmin()
                                 Toast.makeText(context, "De-authorized session successfully", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier
@@ -3379,6 +3443,7 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
 
                 2 -> {
                     // Portal Settings (Customize the application name in settings + live logs view)
+                    val scope = rememberCoroutineScope()
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -3440,8 +3505,8 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
                                         if (brandNameInput.isBlank()) {
                                             Toast.makeText(context, "App Title cannot be blank!", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            viewModel.appNameDynamic = brandNameInput
-                                            Toast.makeText(context, "Branding applied successfully!", Toast.LENGTH_SHORT).show()
+                                            viewModel.updateAppName(brandNameInput)
+                                            Toast.makeText(context, "Branding applied and persisted successfully!", Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     modifier = Modifier
@@ -3454,6 +3519,83 @@ fun AdminDashboardScreen(viewModel: DelalaViewModel) {
                                     Icon(Icons.Filled.Verified, null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("Apply & Save App Name", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Database Sandbox Seeding Card
+                        var isSeeding by remember { mutableStateOf(false) }
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "Database Sandbox Seeding",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF111827)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Generate 5 realistic test COD orders on your Supabase instance to test dashboard statistics and filters.",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF6B7280)
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Button(
+                                    onClick = {
+                                        isSeeding = true
+                                        val mockData = listOf(
+                                            listOf("Abebe Kebede", "0911223344", "abebe@example.com", "Dire Dawa", "Kezira, H.No 45", "Ethiopia", "iPhone 15 Pro Max", "Titanium Gray, 256GB", "1", "Deliver in afternoon"),
+                                            listOf("Sarah Jenkins", "0929876543", "sarah@example.com", "Moyale", "Green Valley St", "Ethiopia", "Samsung Galaxy S24 Ultra", "Black Obsidian, 512GB", "1", "Please call before dispatch"),
+                                            listOf("Betty Tsegaye", "0944112233", "betty@example.com", "Dire Dawa", "Biherawi, Block 12", "Ethiopia", "Sony WH-1000XM5", "Silver", "2", "Fragile COD order"),
+                                            listOf("Mohammed Ali", "0955113322", "mohammed@example.com", "Addis Ababa", "Bole Road, Central Mall", "Ethiopia", "Apple Watch Series 9", "Starlight Aluminium, 45mm", "1", "Check item on delivery"),
+                                            listOf("Elena Vance", "0933778899", "elena@example.com", "Hawassa", "Lakefront Drive", "Ethiopia", "iPad Air", "Blue, 128GB Wifi", "1", "")
+                                        )
+                                        
+                                        scope.launch {
+                                            var count = 0
+                                            mockData.forEach { list ->
+                                                val done = com.example.data.SupabaseClient.insertOrder(
+                                                    customerName = list[0],
+                                                    phone = list[1],
+                                                    email = list[2],
+                                                    city = list[3],
+                                                    address = list[4],
+                                                    country = list[5],
+                                                    productName = list[6],
+                                                    productVariant = list[7],
+                                                    quantity = list[8].toInt(),
+                                                    notes = list[9]
+                                                )
+                                                if (done) count++
+                                            }
+                                            isSeeding = false
+                                            viewModel.fetchSupabaseOrders()
+                                            Toast.makeText(context, "Seeded $count mock orders directly to Supabase!", Toast.LENGTH_LONG).show()
+                                        }
+                                    },
+                                    enabled = !isSeeding,
+                                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    if (isSeeding) {
+                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Seeding Supabase Table...")
+                                    } else {
+                                        Icon(Icons.Filled.AddCircle, null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.0.dp))
+                                        Text("Seed Mock Orders to Database", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
                                 }
                             }
                         }

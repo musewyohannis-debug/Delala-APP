@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            MyApplicationTheme {
+            MyApplicationTheme(darkTheme = viewModel.darkThemeEnabled, dynamicColor = false) {
                 // Intercept Android hardware Back presses to guide wizard steps backward cleanly
                 BackHandler(enabled = true) {
                     val handled = viewModel.navigateBack()

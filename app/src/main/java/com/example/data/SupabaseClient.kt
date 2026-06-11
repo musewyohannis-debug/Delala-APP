@@ -13,8 +13,42 @@ import kotlinx.coroutines.withContext
 
 object SupabaseClient {
     private const val TAG = "SupabaseClient"
-    private const val SUPABASE_URL = "https://dikmpybsherlbejsywrg.supabase.co/rest/v1"
-    private const val API_KEY = "sb_publishable_KV9IHauca_fqiVsrh4b6lQ_-sGTic37"
+    private const val DEFAULT_SUPABASE_URL = "https://dikmpybsherlbejsywrg.supabase.co/rest/v1"
+    private const val DEFAULT_API_KEY = "sb_publishable_KV9IHauca_fqiVsrh4b6lQ_-sGTic37"
+
+    private var customSupabaseUrl: String? = null
+    private var customApiKey: String? = null
+
+    fun init(context: android.content.Context) {
+        val prefs = context.getSharedPreferences("supabase_config", android.content.Context.MODE_PRIVATE)
+        customSupabaseUrl = prefs.getString("url", null)
+        customApiKey = prefs.getString("key", null)
+    }
+
+    fun updateCredentials(context: android.content.Context, url: String, key: String) {
+        val prefs = context.getSharedPreferences("supabase_config", android.content.Context.MODE_PRIVATE)
+        if (url.isBlank() || key.isBlank()) {
+            prefs.edit().remove("url").remove("key").apply()
+            customSupabaseUrl = null
+            customApiKey = null
+            addLog("Reset Supabase credentials to default sandbox.")
+        } else {
+            val sanitizedUrl = url.trim().removeSuffix("/")
+            val sanitizedKey = key.trim()
+            prefs.edit().putString("url", sanitizedUrl).putString("key", sanitizedKey).apply()
+            customSupabaseUrl = sanitizedUrl
+            customApiKey = sanitizedKey
+            addLog("Saved custom Supabase credentials.")
+        }
+    }
+
+    fun getUrl(): String {
+        return customSupabaseUrl ?: DEFAULT_SUPABASE_URL
+    }
+
+    fun getKey(): String {
+        return customApiKey ?: DEFAULT_API_KEY
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -36,11 +70,12 @@ object SupabaseClient {
     }
 
     private fun buildBaseRequest(endpoint: String, method: String, jsonBody: String? = null): Request {
-        val url = "$SUPABASE_URL/$endpoint"
+        val url = "${getUrl()}/$endpoint"
+        val key = getKey()
         val builder = Request.Builder()
             .url(url)
-            .addHeader("apikey", API_KEY)
-            .addHeader("Authorization", "Bearer $API_KEY")
+            .addHeader("apikey", key)
+            .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
             .addHeader("Prefer", "return=minimal") // Minimal return size for efficiency
 
@@ -247,16 +282,16 @@ object SupabaseClient {
                 put("status", "pending")
             }.toString()
 
-            val appointmentsUrl = "https://ycikjhfmwkzhtcstucyg.supabase.co/rest/v1/appointments"
-            val appointmentsKey = "sb_publishable_PyvV2NWIBoQEF3hZHErHtA_65N53ybM"
+            val actualUrl = "${getUrl()}/orders"
+            val actualKey = getKey()
 
-            addLog("POST Appointment to Supabase: $productName for $customerName")
+            addLog("POST Order to Supabase: $productName for $customerName")
             val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
             val body = json.toRequestBody(mediaType)
             val request = Request.Builder()
-                .url(appointmentsUrl)
-                .addHeader("apikey", appointmentsKey)
-                .addHeader("Authorization", "Bearer $appointmentsKey")
+                .url(actualUrl)
+                .addHeader("apikey", actualKey)
+                .addHeader("Authorization", "Bearer $actualKey")
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Prefer", "return=minimal")
                 .post(body)
@@ -264,28 +299,29 @@ object SupabaseClient {
 
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    lastSyncStatus = "Appointment submitted to Supabase successfully"
-                    addLog("Supabase Appointment success: Code ${response.code}")
+                    lastSyncStatus = "Order submitted to Supabase successfully"
+                    addLog("Supabase Order success: Code ${response.code}")
                     true
                 } else {
-                    lastSyncStatus = "Supabase Appointment POST failed: Code ${response.code}"
-                    addLog("Supabase Appointment error: Code ${response.code}")
+                    lastSyncStatus = "Supabase Order POST failed: Code ${response.code}"
+                    addLog("Supabase Order error: Code ${response.code}")
                     false
                 }
             }
         } catch (e: Exception) {
-            lastSyncStatus = "Supabase Appointment connection failed: ${e.message}"
-            addLog("Supabase Appointment error during insert: ${e.message}")
+            lastSyncStatus = "Supabase Order connection failed: ${e.message}"
+            addLog("Supabase Order error during insert: ${e.message}")
             false
         }
     }
 
     private fun buildRequestForOrders(endpoint: String, method: String, jsonBody: String? = null): Request {
-        val url = "$SUPABASE_URL/$endpoint"
+        val url = "${getUrl()}/$endpoint"
+        val key = getKey()
         val builder = Request.Builder()
             .url(url)
-            .addHeader("apikey", API_KEY)
-            .addHeader("Authorization", "Bearer $API_KEY")
+            .addHeader("apikey", key)
+            .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
         
         if (jsonBody != null) {
